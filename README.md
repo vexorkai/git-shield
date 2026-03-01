@@ -1,105 +1,105 @@
 # 🛡 git-shield
 
-**Audit your git repos for exposed real email addresses. Fix them before spammers find you.**
+**Scan your git repos for exposed email addresses. Fix them in one command.**
 
 ---
 
 Inspired by: [YC companies scrape GitHub activity, send spam emails to users](https://news.ycombinator.com/item?id=47163885) (670 upvotes, HN)
 
-Every `git commit` embeds your email address. When you push to GitHub, that email is public — and startups are actively scraping it to build cold-email lists.
-
-`git-shield` scans your local git repos, shows exactly which ones expose your real email, and tells you how to fix it.
+Every `git commit` bakes your email address into history. When you push to GitHub, it's public — and it gets scraped. `git-shield` finds every repo leaking your real email and fixes it automatically using GitHub's no-reply address.
 
 ## Quick Start
 
 ```bash
 # Scan your home directory for exposed emails
-python3 git-shield.py ~
+python3 git-shield.py scan ~
 
-# Scan a specific directory
-python3 git-shield.py ~/Documents/GitHub
+# Auto-fix all repos (detects GitHub username, sets no-reply email)
+python3 git-shield.py fix ~
+
+# Preview what would change (no writes)
+python3 git-shield.py fix ~ --dry-run
+
+# Fix + install pre-commit hook to block future leaks
+python3 git-shield.py fix ~ --hook
+
+# Fix your global git config (run from inside a GitHub repo)
+python3 git-shield.py fix --global
 ```
 
 No dependencies. Just Python 3 + git.
+
+## What `fix` does
+
+1. Detects your GitHub username from the repo's remote URL
+2. Fetches your GitHub user ID via the public API
+3. Constructs the correct no-reply address: `12345678+yourusername@users.noreply.github.com`
+4. Sets `git config user.email` locally per repo (or globally with `--global`)
+5. Optionally installs a pre-commit hook that blocks commits if your real email slips back in
 
 ## Example Output
 
 ```
 ╔══════════════════════════════════════════════╗
-║  🛡  git-shield v0.1.0                       ║
+║  🛡  git-shield v0.2.0                       ║
 ║     Audit your git repos for email exposure  ║
 ╚══════════════════════════════════════════════╝
 
-🔍 Scanning for git repos under: /Users/you/Documents/GitHub
+🔧 Fixing git repos under: /Users/you/Documents/GitHub
 
-  Found 12 git repo(s)
-
-⚠️  Exposed real emails found in 3 repo(s):
+  Found 5 git repo(s)
 
 ──────────────────────────────────────────────────────────────
 
-📁 /Users/you/Documents/GitHub/my-project
-   Remote: https://github.com/you/my-project.git
-   📧 you@yourdomain.com  ← 47 commit(s)
+✅ my-project
+   Set: you@yourdomain.com → 12345678+yourusername@users.noreply.github.com
+   🪝 Pre-commit hook installed
 
-📊 Summary
-   Repos with exposure  : 3
-   Unique real emails   : 1
-   Total commits exposed: 89
+✅ side-project
+   Set: (not set) → 12345678+yourusername@users.noreply.github.com
 
-🔧 FIX IT IN 3 STEPS:
+⏭️  dotfiles  (already correct)
 
-1️⃣  Find your GitHub no-reply email:
-    https://github.com/settings/emails
-    → 'Keep my email addresses private'
-    → Copy: YOUR_ID+USERNAME@users.noreply.github.com
+──────────────────────────────────────────────────────────────
 
-2️⃣  Set it as your global git email:
-    git config --global user.email "YOUR_ID+USERNAME@users.noreply.github.com"
+📊 Fix Summary
+   Fixed       : 2 repo(s)
+   Skipped     : 1 repo(s) (already correct)
+   No GH remote: 2 repo(s) (skipped)
 
-3️⃣  Block CLI pushes that expose real email:
-    https://github.com/settings/emails
-    → Enable: 'Block command line pushes that expose my email'
+✅ Done. Future commits will use the GitHub no-reply email.
 ```
 
-## What it detects
+## All commands
 
-- ✅ Your real email in commit history
-- ✅ Multiple email addresses used across repos
-- ✅ Shows remote URL so you know which are public
+| Command | What it does |
+|---|---|
+| `git-shield scan [dir]` | Scan for repos with exposed real emails |
+| `git-shield fix [dir]` | Auto-fix using GitHub no-reply email |
+| `git-shield fix --dry-run` | Preview changes, apply nothing |
+| `git-shield fix --global` | Fix global git config (run from inside a GitHub repo) |
+| `git-shield fix --hook` | Fix + install pre-commit hook |
+| `git-shield fix [dir] --hook --dry-run` | Preview fix + hook installation |
 
-## What it does NOT do
+## Why the pre-commit hook matters
 
-- ❌ Makes no network requests (100% local)
-- ❌ Does not modify any files
-- ❌ Cannot remove emails from past commits (that's risky without explicit action)
-
-## Why this matters
-
-Every commit you make contains your email in plaintext. Anyone can run:
-
-```bash
-git log --format="%ae" | sort | uniq
-```
-
-…on a cloned repo and harvest your address. Some YC-backed companies have built businesses around this. Your email is in thousands of commits before you realize it.
-
-The fix takes 2 minutes. This tool shows you exactly where to look.
-
-## The fix, explained
-
-GitHub provides a "no-reply" email that links commits to your account without exposing your real address. It looks like:
+`git config` only affects future commits — but you can still accidentally override it with `GIT_AUTHOR_EMAIL` or a misconfigured editor plugin. The `--hook` flag installs a local pre-commit check that blocks the commit if the email doesn't match the no-reply pattern.
 
 ```
-12345678+yourusername@users.noreply.github.com
+❌ git-shield: Commit blocked!
+   Your email 'you@yourdomain.com' is not a GitHub no-reply address.
+   Run: git-shield fix
 ```
 
-Once configured, GitHub routes everything correctly. Past commits still contain your old email — but you stop the bleeding going forward.
+## What about past commits?
+
+They still contain your old email. Rewriting history is risky (force-push, collaborator divergence) and out of scope here. `git-shield` focuses on stopping the bleeding going forward. The real fix is to enable GitHub's "Block command line pushes that expose my email" setting and use the no-reply address everywhere from now on.
 
 ## Requirements
 
 - Python 3.7+
-- git installed in PATH
+- git in PATH
+- Internet access for `fix` (GitHub API to fetch user ID)
 
 ## License
 
